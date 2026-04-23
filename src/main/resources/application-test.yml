@@ -1,0 +1,13 @@
+micronaut:
+  server:
+    port: 8080
+
+api:
+  key: default-dev-key
+
+r2dbc:
+  datasources:
+    default:
+      url: r2dbc:pool:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:mlb_test}?sslMode=${DB_SSL_MODE:DISABLE}&initialSize=1&maxSize=5&maxIdleTime=PT5M&maxLifeTime=PT30M&validationQuery=SELECT%201
+      username: ${DB_USER:postgres}
+      password: ${DB_PASSWORD:postgres}

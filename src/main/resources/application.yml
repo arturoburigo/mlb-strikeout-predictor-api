@@ -1,0 +1,43 @@
+micronaut:
+  server:
+    port: ${SERVER_PORT:8080}
+    cors:
+      enabled: true
+      configurations:
+        web:
+          allowedOrigins:
+            - ${FRONTEND_ORIGIN:`http://localhost:3000`}
+          allowedMethods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+          allowedHeaders:
+            - "Content-Type"
+            - "Authorization"
+            - "X-API-Key"
+  application:
+    name: mlb-strikeout-predictor-api
+api:
+  key: ${API_KEY:default-dev-key}
+
+  metrics:
+    enabled: true
+    export:
+      prometheus:
+        enabled: true
+        descriptions: true
+        step: PT1M
+endpoints:
+  health:
+    enabled: true
+    sensitive: false
+r2dbc:
+  datasources:
+    default:
+      url: r2dbc:pool:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:mlb}?sslMode=${DB_SSL_MODE:DISABLE}&tcpKeepAlive=true&initialSize=5&maxSize=20&maxIdleTime=PT10M&maxLifeTime=PT1H&maxAcquireTime=PT10S&maxCreateConnectionTime=PT10S&validationQuery=SELECT%201&acquireRetry=3
+      username: ${DB_USER:postgres}
+      password: ${DB_PASSWORD:postgres}
+      db-type: postgres
+      dialect: POSTGRES

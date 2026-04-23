@@ -1,0 +1,10 @@
+micronaut:
+  server:
+    port: 0
+
+r2dbc:
+  datasources:
+    default:
+      url: r2dbc:postgresql://localhost:5432/mlb
+      username: postgres
+      password: postgres

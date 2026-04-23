@@ -1,0 +1,49 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        shell: bash
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.OCI_SSH_KEY }}" > ~/.ssh/oci_key
+          chmod 600 ~/.ssh/oci_key
+          ssh-keyscan -H "${{ secrets.OCI_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync backend sources
+        shell: bash
+        run: |
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude ".github" \
+            --exclude "target" \
+            --exclude ".idea" \
+            --exclude ".run" \
+            --exclude ".micronaut" \
+            --exclude ".env" \
+            --exclude "ssh-key-*.key" \
+            --exclude "ssh-key-*.pub" \
+            -e "ssh -i ~/.ssh/oci_key" \
+            ./ "${{ secrets.OCI_USER }}@${{ secrets.OCI_HOST }}:/opt/mlb-strikeout-predictor-api/"
+
+      - name: Rebuild backend on OCI
+        shell: bash
+        run: |
+          ssh -i ~/.ssh/oci_key "${{ secrets.OCI_USER }}@${{ secrets.OCI_HOST }}" '
+            set -euo pipefail
+            cd /opt/mlb-strikeout-predictor-api
+            docker compose up -d --build api nginx
+            docker compose ps
+          '

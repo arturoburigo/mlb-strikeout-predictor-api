@@ -1,0 +1,6 @@
+applicationType: default
+defaultPackage: com.mlbsk
+testFramework: junit
+sourceLanguage: kotlin
+buildTool: gradle_kotlin
+features: [app-name, cache-caffeine, gradle, http-client-test, junit, kotlin, kotlin-application, ksp, logback, management, micrometer, micrometer-prometheus, micronaut-aot, micronaut-build, micronaut-http-validation, netty-server, postgres, r2dbc, reactor, readme, serialization-jackson, shade, static-resources, test-resources, validation, yaml, yaml-build]
