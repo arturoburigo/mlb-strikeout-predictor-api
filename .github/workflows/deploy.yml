@@ -43,7 +43,9 @@ jobs:
         run: |
           ssh -i ~/.ssh/oci_key "${{ secrets.OCI_USER }}@${{ secrets.OCI_HOST }}" '
             set -euo pipefail
+            export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+            systemctl --user start podman.socket
             cd /opt/mlb-strikeout-predictor-api
-            docker compose up -d --build api nginx
+            docker compose up -d --build api web nginx
             docker compose ps
           '
