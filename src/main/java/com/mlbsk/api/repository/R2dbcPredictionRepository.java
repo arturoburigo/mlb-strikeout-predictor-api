@@ -21,40 +21,43 @@ public class R2dbcPredictionRepository implements PredictionRepository {
 
     @Override
     public Flux<PredictionRow> findByDate(@Nullable LocalDate date, int limit, int offset) {
-        return Mono.from(factory.create()).flatMapMany(conn -> {
-            var statement = date != null
-                ? conn.createStatement("""
-                    SELECT p.id, p.prediction_date, p.player, p.team, p.opponent, p.home,
-                           p.over_line, p.over_odds, p.under_odds, p.expected_k_poisson,
-                           p.p_over, p.p_under, p.recommended_side, p.edge_over, p.edge_under,
-                           p.result, p.ai_insight, os.bookmaker
-                    FROM predictions p
-                    LEFT JOIN odds_snapshots os ON os.id = p.odds_snapshot_id
-                    WHERE p.prediction_date = $1
-                    ORDER BY p.created_at DESC
-                    LIMIT $2 OFFSET $3
-                    """)
-                    .bind("$1", date)
-                    .bind("$2", limit)
-                    .bind("$3", offset)
-                : conn.createStatement("""
-                    SELECT p.id, p.prediction_date, p.player, p.team, p.opponent, p.home,
-                           p.over_line, p.over_odds, p.under_odds, p.expected_k_poisson,
-                           p.p_over, p.p_under, p.recommended_side, p.edge_over, p.edge_under,
-                           p.result, p.ai_insight, os.bookmaker
-                    FROM predictions p
-                    LEFT JOIN odds_snapshots os ON os.id = p.odds_snapshot_id
-                    WHERE p.prediction_date = (SELECT MAX(prediction_date) FROM predictions)
-                    ORDER BY p.created_at DESC
-                    LIMIT $1 OFFSET $2
-                    """)
-                    .bind("$1", limit)
-                    .bind("$2", offset);
+        return Flux.usingWhen(
+            Mono.from(factory.create()),
+            conn -> {
+                var statement = date != null
+                    ? conn.createStatement("""
+                        SELECT p.id, p.prediction_date, p.player, p.team, p.opponent, p.home,
+                               p.over_line, p.over_odds, p.under_odds, p.expected_k_poisson,
+                               p.p_over, p.p_under, p.recommended_side, p.edge_over, p.edge_under,
+                               p.result, p.ai_insight, os.bookmaker
+                        FROM predictions p
+                        LEFT JOIN odds_snapshots os ON os.id = p.odds_snapshot_id
+                        WHERE p.prediction_date = $1
+                        ORDER BY p.created_at DESC
+                        LIMIT $2 OFFSET $3
+                        """)
+                        .bind("$1", date)
+                        .bind("$2", limit)
+                        .bind("$3", offset)
+                    : conn.createStatement("""
+                        SELECT p.id, p.prediction_date, p.player, p.team, p.opponent, p.home,
+                               p.over_line, p.over_odds, p.under_odds, p.expected_k_poisson,
+                               p.p_over, p.p_under, p.recommended_side, p.edge_over, p.edge_under,
+                               p.result, p.ai_insight, os.bookmaker
+                        FROM predictions p
+                        LEFT JOIN odds_snapshots os ON os.id = p.odds_snapshot_id
+                        WHERE p.prediction_date = (SELECT MAX(prediction_date) FROM predictions)
+                        ORDER BY p.created_at DESC
+                        LIMIT $1 OFFSET $2
+                        """)
+                        .bind("$1", limit)
+                        .bind("$2", offset);
 
-            return Flux.from(statement.execute())
-                .doFinally(signalType -> conn.close())
-                .flatMap(result -> result.map(this::mapRow));
-        });
+                return Flux.from(statement.execute())
+                    .flatMap(result -> result.map(this::mapRow));
+            },
+            conn -> Mono.from(conn.close())
+        );
     }
 
     private PredictionRow mapRow(Row row, RowMetadata metadata) {

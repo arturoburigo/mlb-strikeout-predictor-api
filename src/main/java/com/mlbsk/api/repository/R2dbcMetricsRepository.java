@@ -19,35 +19,38 @@ public class R2dbcMetricsRepository implements MetricsRepository {
 
     @Override
     public Mono<DailyMetricsRow> findDailyMetricsByDate(@Nullable LocalDate date) {
-        return Mono.from(factory.create()).flatMap(conn -> {
-            var statement = date != null
-                ? conn.createStatement("""
-                    SELECT prediction_date as date,
-                           model_mae as mae,
-                           brier_score as log_loss,
-                           avg_edge as avg_ev,
-                           win_rate as hit_rate,
-                           total_predictions
-                    FROM daily_accuracy_metrics
-                    WHERE prediction_date = $1
-                    LIMIT 1
-                    """).bind("$1", date)
-                : conn.createStatement("""
-                    SELECT prediction_date as date,
-                           model_mae as mae,
-                           brier_score as log_loss,
-                           avg_edge as avg_ev,
-                           win_rate as hit_rate,
-                           total_predictions
-                    FROM daily_accuracy_metrics
-                    ORDER BY prediction_date DESC
-                    LIMIT 1
-                    """);
+        return Mono.usingWhen(
+            Mono.from(factory.create()),
+            conn -> {
+                var statement = date != null
+                    ? conn.createStatement("""
+                        SELECT prediction_date as date,
+                               model_mae as mae,
+                               brier_score as log_loss,
+                               avg_edge as avg_ev,
+                               win_rate as hit_rate,
+                               total_predictions
+                        FROM daily_accuracy_metrics
+                        WHERE prediction_date = $1
+                        LIMIT 1
+                        """).bind("$1", date)
+                    : conn.createStatement("""
+                        SELECT prediction_date as date,
+                               model_mae as mae,
+                               brier_score as log_loss,
+                               avg_edge as avg_ev,
+                               win_rate as hit_rate,
+                               total_predictions
+                        FROM daily_accuracy_metrics
+                        ORDER BY prediction_date DESC
+                        LIMIT 1
+                        """);
 
-            return Mono.from(statement.execute())
-                .doFinally(signalType -> conn.close())
-                .flatMap(result -> Mono.from(result.map((row, metadata) -> mapRow(row))));
-        });
+                return Mono.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.map((row, metadata) -> mapRow(row))));
+            },
+            conn -> Mono.from(conn.close())
+        );
     }
 
     private DailyMetricsRow mapRow(Row row) {

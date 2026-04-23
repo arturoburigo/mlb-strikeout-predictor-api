@@ -200,9 +200,12 @@ public class R2dbcWriteRepository implements WriteRepository {
     }
 
     private <T> Flux<T> queryMany(String sql, StatementBinder binder, RowMapper<T> mapper) {
-        return Mono.from(factory.create()).flatMapMany(conn -> Flux.from(binder.bind(conn.createStatement(sql)).execute())
-            .flatMap(result -> result.map(mapper::map))
-            .doFinally(signalType -> conn.close()));
+        return Flux.usingWhen(
+            Mono.from(factory.create()),
+            conn -> Flux.from(binder.bind(conn.createStatement(sql)).execute())
+                .flatMap(result -> result.map(mapper::map)),
+            conn -> Mono.from(conn.close())
+        );
     }
 
     private <T> Mono<T> queryOne(String sql, StatementBinder binder, RowMapper<T> mapper) {

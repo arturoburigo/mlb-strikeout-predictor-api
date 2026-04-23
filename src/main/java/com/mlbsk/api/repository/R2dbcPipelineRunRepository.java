@@ -19,18 +19,19 @@ public class R2dbcPipelineRunRepository implements PipelineRunRepository {
 
     @Override
     public Flux<PipelineRunRow> findAll(int limit, int offset) {
-        return Mono.from(factory.create()).flatMapMany(conn ->
-            Flux.from(conn.createStatement("""
-                SELECT id, job_name, status, started_at, finished_at, error_message
-                FROM pipeline_runs
-                ORDER BY started_at DESC
-                LIMIT $1 OFFSET $2
-                """)
-                .bind("$1", limit)
-                .bind("$2", offset)
-                .execute())
-                .doFinally(signalType -> conn.close())
-                .flatMap(result -> result.map(this::mapRow))
+        return Flux.usingWhen(
+            Mono.from(factory.create()),
+            conn -> Flux.from(conn.createStatement("""
+                    SELECT id, job_name, status, started_at, finished_at, error_message
+                    FROM pipeline_runs
+                    ORDER BY started_at DESC
+                    LIMIT $1 OFFSET $2
+                    """)
+                    .bind("$1", limit)
+                    .bind("$2", offset)
+                    .execute())
+                .flatMap(result -> result.map(this::mapRow)),
+            conn -> Mono.from(conn.close())
         );
     }
 
