@@ -15,6 +15,11 @@ services:
       DB_SSL_MODE: ${DB_SSL_MODE:-REQUIRE}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
       SERVER_PORT: 8080
+      ELASTIC_APM_SERVER_URL: ${ELASTIC_APM_SERVER_URL:-http://apm-server:8200}
+      ELASTIC_APM_SECRET_TOKEN: ${APM_SECRET_TOKEN:-supersecrettoken123}
+      ELASTIC_APM_SERVICE_NAME: mlb-api
+      ELASTIC_APM_APPLICATION_PACKAGES: com.mlbsk
+      ELASTIC_APM_ENVIRONMENT: production
     networks:
       app_net:
         ipv4_address: 172.30.0.10
@@ -50,6 +55,11 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       API_BASE_URL: http://api:8080
       API_KEY: ${API_KEY}
+      ELASTIC_APM_SERVER_URL: ${ELASTIC_APM_SERVER_URL:-http://apm-server:8200}
+      ELASTIC_APM_SECRET_TOKEN: ${APM_SECRET_TOKEN:-supersecrettoken123}
+      ELASTIC_APM_SERVICE_NAME: mlb-web
+      ELASTIC_APM_ENVIRONMENT: production
+      ELASTIC_APM_ACTIVE: "true"
     networks:
       app_net:
         ipv4_address: 172.30.0.12

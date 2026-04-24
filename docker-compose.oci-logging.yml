@@ -1,0 +1,12 @@
+services:
+  api:
+    logging:
+      driver: k8s-file
+
+  web:
+    logging:
+      driver: k8s-file
+
+  nginx:
+    logging:
+      driver: k8s-file
