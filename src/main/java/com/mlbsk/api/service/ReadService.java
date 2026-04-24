@@ -258,7 +258,7 @@ public class ReadService {
                 Double stake = row.stake() != null ? row.stake() : row.parlayStake();
                 Double odds = row.odds() != null ? row.odds() : row.parlayOdds();
                 Integer actualK = row.actualK() != null ? row.actualK() : row.predictionActualStrikeouts();
-                String result = resolveResult(row.predictionResult(), row.recommendedSide(), row.line(), actualK);
+                String result = resolveBetResult(row.won(), row.predictionResult(), row.recommendedSide(), row.line(), actualK);
                 Double profit = row.storedProfit() != null ? row.storedProfit() : calculateProfit(result, stake, odds);
 
                 Map<String, Object> bet = new LinkedHashMap<>();
@@ -432,6 +432,16 @@ public class ReadService {
                 "opponentTrend", opponentTrend
             );
         });
+    }
+
+    private String resolveBetResult(Boolean won, String predictionResult, String side, Double line, Integer actualK) {
+        if (Boolean.TRUE.equals(won)) {
+            return "GREEN";
+        }
+        if (Boolean.FALSE.equals(won)) {
+            return "RED";
+        }
+        return resolveResult(predictionResult, side, line, actualK);
     }
 
     private Map<String, Object> buildPerformanceSummary(List<ReadRepository.PerformanceMetricsRow> rows) {

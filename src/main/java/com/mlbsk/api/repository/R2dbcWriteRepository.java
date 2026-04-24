@@ -103,6 +103,107 @@ public class R2dbcWriteRepository implements WriteRepository {
     }
 
     @Override
+    public Mono<BetSettlementInputRow> findBetSettlementInput(String userId, String betId) {
+        return queryOne("""
+            SELECT ub.id, COALESCE(ub.stake, up.stake) AS stake, COALESCE(ub.odds, up.odds) AS odds
+            FROM user_bets ub
+            LEFT JOIN user_parlays up ON up.id = ub.parlay_id
+            WHERE ub.user_id = $1 AND ub.id = $2
+            """, stmt -> stmt.bind("$1", userId).bind("$2", betId), (row, meta) -> new BetSettlementInputRow(
+            row.get("id", String.class),
+            readDouble(row, "stake"),
+            readDouble(row, "odds")
+        ));
+    }
+
+    @Override
+    public Mono<Void> updateBet(String userId, String betId, Double stake, Double odds, String platform) {
+        return Mono.usingWhen(
+            Mono.from(factory.create()),
+            conn -> Mono.from(conn.beginTransaction())
+                .then(executeWithConnection(conn, """
+                    UPDATE user_bets
+                    SET stake = $3, odds = $4, platform = $5
+                    WHERE user_id = $1 AND id = $2
+                    """, stmt -> stmt.bind("$1", userId)
+                    .bind("$2", betId)
+                    .bind("$3", stake)
+                    .bind("$4", odds)
+                    .bind("$5", platform)))
+                .then(executeWithConnection(conn, """
+                    UPDATE user_bet_results ubr
+                    SET profit = CASE
+                            WHEN ubr.won = TRUE THEN $3 * ($4 - 1)
+                            WHEN ubr.won = FALSE THEN -$3
+                            ELSE ubr.profit
+                        END
+                    FROM user_bets ub
+                    WHERE ubr.user_bet_id = ub.id
+                      AND ub.user_id = $1
+                      AND ub.id = $2
+                    """, stmt -> stmt.bind("$1", userId)
+                    .bind("$2", betId)
+                    .bind("$3", stake)
+                    .bind("$4", odds)))
+                .then(Mono.from(conn.commitTransaction()))
+                .onErrorResume(error -> Mono.from(conn.rollbackTransaction()).then(Mono.error(error))),
+            conn -> Mono.from(conn.close())
+        );
+    }
+
+    @Override
+    public Mono<Void> upsertBetResult(String resultId, String userId, String betId, Boolean won, Double profit) {
+        return execute("""
+            INSERT INTO user_bet_results (id, user_bet_id, won, profit, settled_at)
+            SELECT $3, ub.id, $4, $5, $6
+            FROM user_bets ub
+            WHERE ub.user_id = $1 AND ub.id = $2
+            ON CONFLICT (user_bet_id) DO UPDATE
+            SET won = EXCLUDED.won,
+                profit = EXCLUDED.profit,
+                settled_at = EXCLUDED.settled_at
+            """, stmt -> stmt.bind("$1", userId)
+            .bind("$2", betId)
+            .bind("$3", resultId)
+            .bind("$4", won)
+            .bind("$5", profit)
+            .bind("$6", Instant.now()));
+    }
+
+    @Override
+    public Mono<Void> clearBetResult(String userId, String betId) {
+        return execute("""
+            DELETE FROM user_bet_results ubr
+            USING user_bets ub
+            WHERE ubr.user_bet_id = ub.id
+              AND ub.user_id = $1
+              AND ub.id = $2
+            """, stmt -> stmt.bind("$1", userId).bind("$2", betId));
+    }
+
+    @Override
+    public Mono<Void> deleteBet(String userId, String betId) {
+        return Mono.usingWhen(
+            Mono.from(factory.create()),
+            conn -> Mono.from(conn.beginTransaction())
+                .then(executeWithConnection(conn, """
+                    DELETE FROM user_bet_results ubr
+                    USING user_bets ub
+                    WHERE ubr.user_bet_id = ub.id
+                      AND ub.user_id = $1
+                      AND ub.id = $2
+                    """, stmt -> stmt.bind("$1", userId).bind("$2", betId)))
+                .then(executeWithConnection(conn, """
+                    DELETE FROM user_bets
+                    WHERE user_id = $1 AND id = $2
+                    """, stmt -> stmt.bind("$1", userId).bind("$2", betId)))
+                .then(Mono.from(conn.commitTransaction()))
+                .onErrorResume(error -> Mono.from(conn.rollbackTransaction()).then(Mono.error(error))),
+            conn -> Mono.from(conn.close())
+        );
+    }
+
+    @Override
     public Flux<PredictionAvailabilityRow> findPredictionAvailabilities(Iterable<Long> predictionIds) {
         List<Long> ids = new ArrayList<>();
         predictionIds.forEach(ids::add);
@@ -227,6 +328,11 @@ public class R2dbcWriteRepository implements WriteRepository {
     private long readLong(Row row, String column) {
         Number value = row.get(column, Number.class);
         return value != null ? value.longValue() : 0L;
+    }
+
+    private Double readDouble(Row row, String column) {
+        Number value = row.get(column, Number.class);
+        return value == null ? null : value.doubleValue();
     }
 
     private io.r2dbc.spi.Statement bindNullable(io.r2dbc.spi.Statement stmt, String key, Object value, Class<?> type) {

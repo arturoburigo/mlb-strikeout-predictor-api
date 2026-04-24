@@ -17,6 +17,16 @@ public interface WriteRepository {
 
     Mono<Void> createTrackedBet(String id, String userId, long predictionId, Double stake, Double odds, String platform);
 
+    Mono<BetSettlementInputRow> findBetSettlementInput(String userId, String betId);
+
+    Mono<Void> updateBet(String userId, String betId, Double stake, Double odds, String platform);
+
+    Mono<Void> upsertBetResult(String resultId, String userId, String betId, Boolean won, Double profit);
+
+    Mono<Void> clearBetResult(String userId, String betId);
+
+    Mono<Void> deleteBet(String userId, String betId);
+
     Flux<PredictionAvailabilityRow> findPredictionAvailabilities(Iterable<Long> predictionIds);
 
     Mono<Void> createParlayWithBets(String parlayId, String userId, Double stake, Double odds, String platform, Iterable<Long> predictionIds, Iterable<String> betIds);
@@ -38,5 +48,11 @@ public interface WriteRepository {
     record PredictionAvailabilityRow(
         long id,
         String recommendedSide
+    ) {}
+
+    record BetSettlementInputRow(
+        String betId,
+        Double stake,
+        Double odds
     ) {}
 }

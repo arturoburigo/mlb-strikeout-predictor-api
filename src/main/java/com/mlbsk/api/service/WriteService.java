@@ -1,12 +1,15 @@
 package com.mlbsk.api.service;
 
 import com.mlbsk.api.dto.CreateUserRequest;
+import com.mlbsk.api.dto.DeleteBetRequest;
 import com.mlbsk.api.dto.LoginRequest;
 import com.mlbsk.api.dto.LoginResponse;
 import com.mlbsk.api.dto.ParlayBetRequest;
 import com.mlbsk.api.dto.SavePreferencesRequest;
+import com.mlbsk.api.dto.SetBetResultRequest;
 import com.mlbsk.api.dto.ToggleUserActiveRequest;
 import com.mlbsk.api.dto.TrackedBetRequest;
+import com.mlbsk.api.dto.UpdateBetRequest;
 import com.mlbsk.api.exception.ResourceNotFoundException;
 import com.mlbsk.api.repository.WriteRepository;
 import jakarta.inject.Singleton;
@@ -123,6 +126,58 @@ public class WriteService {
             });
     }
 
+    public Mono<Void> updateBet(UpdateBetRequest request) {
+        if (request.userId() == null || request.userId().isBlank()) {
+            return Mono.error(new IllegalArgumentException("User is required"));
+        }
+        if (request.betId() == null || request.betId().isBlank()) {
+            return Mono.error(new IllegalArgumentException("Bet is required"));
+        }
+        if (request.stake() == null || request.stake() <= 0) {
+            return Mono.error(new IllegalArgumentException("Stake must be positive"));
+        }
+        if (request.odds() == null || request.odds() <= 1) {
+            return Mono.error(new IllegalArgumentException("Odds must be greater than 1.00"));
+        }
+        String platform = request.platform() == null || request.platform().isBlank() ? DEFAULT_PLATFORM : request.platform().trim();
+        return repository.updateBet(request.userId(), request.betId(), request.stake(), request.odds(), platform);
+    }
+
+    public Mono<Void> setBetResult(SetBetResultRequest request) {
+        if (request.userId() == null || request.userId().isBlank()) {
+            return Mono.error(new IllegalArgumentException("User is required"));
+        }
+        if (request.betId() == null || request.betId().isBlank()) {
+            return Mono.error(new IllegalArgumentException("Bet is required"));
+        }
+
+        String result = request.result() == null ? "" : request.result().trim().toUpperCase();
+        if ("OPEN".equals(result)) {
+            return repository.clearBetResult(request.userId(), request.betId());
+        }
+        if (!"GREEN".equals(result) && !"RED".equals(result)) {
+            return Mono.error(new IllegalArgumentException("Result must be GREEN, RED, or OPEN"));
+        }
+
+        return repository.findBetSettlementInput(request.userId(), request.betId())
+            .switchIfEmpty(Mono.error(new ResourceNotFoundException("Bet was not found")))
+            .flatMap(bet -> {
+                Double profit = calculateProfit(result, bet.stake(), bet.odds());
+                Boolean won = "GREEN".equals(result);
+                return repository.upsertBetResult(UUID.randomUUID().toString(), request.userId(), bet.betId(), won, profit);
+            });
+    }
+
+    public Mono<Void> deleteBet(DeleteBetRequest request) {
+        if (request.userId() == null || request.userId().isBlank()) {
+            return Mono.error(new IllegalArgumentException("User is required"));
+        }
+        if (request.betId() == null || request.betId().isBlank()) {
+            return Mono.error(new IllegalArgumentException("Bet is required"));
+        }
+        return repository.deleteBet(request.userId(), request.betId());
+    }
+
     public Mono<Void> createUser(CreateUserRequest request) {
         String email = request.email() == null ? null : request.email().trim();
         if (email == null || email.isBlank()) {
@@ -153,5 +208,18 @@ public class WriteService {
         }
         boolean nextActive = request.currentActive() == null || !request.currentActive();
         return repository.updateUserActive(request.userId(), nextActive);
+    }
+
+    private Double calculateProfit(String result, Double stake, Double odds) {
+        if (stake == null || odds == null) {
+            return null;
+        }
+        if ("GREEN".equals(result)) {
+            return stake * (odds - 1);
+        }
+        if ("RED".equals(result)) {
+            return -stake;
+        }
+        return 0.0;
     }
 }
