@@ -37,7 +37,7 @@ public class WriteService {
         }
         return repository.findUserByEmail(request.email().trim())
             .filter(WriteRepository.AuthUserRow::active)
-            .filter(user -> BCrypt.checkpw(request.password(), user.passwordHash()))
+            .filter(user -> BCrypt.checkpw(request.password(), normalizeBcryptHash(user.passwordHash())))
             .map(user -> new LoginResponse(user.id(), user.email(), user.displayName(), user.active()));
     }
 
@@ -208,6 +208,13 @@ public class WriteService {
         }
         boolean nextActive = request.currentActive() == null || !request.currentActive();
         return repository.updateUserActive(request.userId(), nextActive);
+    }
+
+    private String normalizeBcryptHash(String passwordHash) {
+        if (passwordHash != null && passwordHash.startsWith("$2b$")) {
+            return "$2a$" + passwordHash.substring(4);
+        }
+        return passwordHash;
     }
 
     private Double calculateProfit(String result, Double stake, Double odds) {
