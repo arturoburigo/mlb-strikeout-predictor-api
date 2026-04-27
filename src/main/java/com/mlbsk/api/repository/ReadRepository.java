@@ -12,6 +12,8 @@ public interface ReadRepository {
 
     Flux<DashboardPredictionRow> findPredictionsByDate(LocalDate date);
 
+    Flux<DashboardOddsBookmakerRow> findOddsBookmakersByDate(LocalDate date);
+
     Flux<DashboardTrackedBetRow> findLatestTrackedBets(String userId, LocalDate date);
 
     Mono<DashboardMetricsRow> findLatestMetrics();
@@ -217,5 +219,14 @@ public interface ReadRepository {
         Double kPctOverall,
         Double kPctVsRhp,
         Double kPctVsLhp
+    ) {}
+
+    record DashboardOddsBookmakerRow(
+        String player,
+        String bookmaker,
+        Double overLine,
+        Double overOdds,
+        Double underOdds,
+        String alternativeLinesJson
     ) {}
 }

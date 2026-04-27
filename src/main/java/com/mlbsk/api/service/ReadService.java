@@ -1,5 +1,7 @@
 package com.mlbsk.api.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mlbsk.api.repository.ReadRepository;
 import jakarta.inject.Singleton;
 import java.time.Instant;
@@ -18,9 +20,11 @@ public class ReadService {
 
     private static final int RECENT_FINAL_RECONCILIATION_DAYS = 14;
     private final ReadRepository repository;
+    private final ObjectMapper objectMapper;
 
-    public ReadService(ReadRepository repository) {
+    public ReadService(ReadRepository repository, ObjectMapper objectMapper) {
         this.repository = repository;
+        this.objectMapper = objectMapper;
     }
 
     public Mono<Map<String, Object>> getDashboard(String userId) {
@@ -31,7 +35,8 @@ public class ReadService {
                 repository.findLatestMetrics().map(Optional::of).defaultIfEmpty(Optional.empty()),
                 repository.findRecentUserDailyStats(userId, 7).collectList(),
                 repository.findRecentDashboardBets(userId, 5).collectList(),
-                repository.findUserPreferences(userId).map(Optional::of).defaultIfEmpty(Optional.empty())
+                repository.findUserPreferences(userId).map(Optional::of).defaultIfEmpty(Optional.empty()),
+                repository.findOddsBookmakersByDate(date).collectList()
             ).map(tuple -> {
                 List<ReadRepository.DashboardPredictionRow> predictionRows = tuple.getT1();
                 Map<Long, ReadRepository.DashboardTrackedBetRow> trackedBetByPredictionId = new LinkedHashMap<>();
@@ -40,6 +45,27 @@ public class ReadService {
                 }
                 ReadRepository.DashboardMetricsRow latestMetrics = tuple.getT3().orElse(null);
                 ReadRepository.UserPreferenceRow preferencesRow = tuple.getT6().orElse(null);
+                List<ReadRepository.DashboardOddsBookmakerRow> oddsRows = tuple.getT7();
+                
+                Map<String, List<Map<String, Object>>> oddsByPlayer = new LinkedHashMap<>();
+                for (ReadRepository.DashboardOddsBookmakerRow row : oddsRows) {
+                    List<Map<String, Object>> list = oddsByPlayer.computeIfAbsent(row.player(), k -> new ArrayList<>());
+                    List<Map<String, Object>> altLines = new ArrayList<>();
+                    if (row.alternativeLinesJson() != null && !row.alternativeLinesJson().isEmpty() && !row.alternativeLinesJson().equals("[]")) {
+                        try {
+                            altLines = objectMapper.readValue(row.alternativeLinesJson(), new TypeReference<List<Map<String, Object>>>() {});
+                        } catch (Exception e) {
+                            // ignore
+                        }
+                    }
+                    list.add(mapOf(
+                        "key", row.bookmaker(),
+                        "line", row.overLine(),
+                        "overOdds", row.overOdds(),
+                        "underOdds", row.underOdds(),
+                        "alternativeLines", altLines
+                    ));
+                }
 
                 List<Map<String, Object>> topPredictions = predictionRows.stream()
                     .map(row -> {
@@ -66,7 +92,7 @@ public class ReadService {
                         item.put("recommendedSide", row.recommendedSide());
                         item.put("recommendedOdds", selectOdds(row.recommendedSide(), row.overOdds(), row.underOdds()));
                         item.put("bestEdge", bestEdge);
-                        item.put("bookmaker", row.bookmaker());
+                        item.put("bookmakers", oddsByPlayer.getOrDefault(row.player(), List.of()));
                         item.put("result", row.result());
                         item.put("aiInsight", row.aiInsight());
                         item.put("isTracked", trackedBet != null);

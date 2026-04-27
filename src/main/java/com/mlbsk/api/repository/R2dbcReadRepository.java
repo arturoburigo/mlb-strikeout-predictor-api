@@ -65,6 +65,28 @@ public class R2dbcReadRepository implements ReadRepository {
     }
 
     @Override
+    public Flux<DashboardOddsBookmakerRow> findOddsBookmakersByDate(LocalDate date) {
+        return queryMany("""
+            SELECT os.player, os.bookmaker, os.over_line, os.over_odds, os.under_odds,
+                   COALESCE(json_agg(
+                       json_build_object('line', oal.line, 'overOdds', oal.over_odds, 'underOdds', oal.under_odds)
+                   ) FILTER (WHERE oal.id IS NOT NULL), '[]') as alternative_lines
+            FROM odds_snapshots os
+            LEFT JOIN odds_alternative_lines oal ON oal.odds_snapshot_id = os.id
+            WHERE os.snapshot_date = $1
+            GROUP BY os.id
+            ORDER BY os.player ASC, os.bookmaker ASC
+            """, stmt -> stmt.bind("$1", date), (row, meta) -> new DashboardOddsBookmakerRow(
+            row.get("player", String.class),
+            row.get("bookmaker", String.class),
+            readDouble(row, "over_line"),
+            readDouble(row, "over_odds"),
+            readDouble(row, "under_odds"),
+            row.get("alternative_lines", String.class)
+        ));
+    }
+
+    @Override
     public Flux<DashboardTrackedBetRow> findLatestTrackedBets(String userId, LocalDate date) {
         return queryMany("""
             SELECT prediction_id, id, stake, odds, platform, placed_at, parlay_id
