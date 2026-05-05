@@ -76,12 +76,10 @@ public class WriteService {
         return repository.findPredictionAvailability(request.predictionId())
             .switchIfEmpty(Mono.error(new ResourceNotFoundException("Prediction is not available for bet tracking")))
             .flatMap(prediction -> {
-                if (prediction.recommendedSide() == null) {
-                    return Mono.error(new IllegalArgumentException("Prediction is not available for bet tracking"));
-                }
                 return repository.findLatestTrackedBetId(request.userId(), prediction.id())
-                    .flatMap(existingId -> repository.updateTrackedBet(existingId, request.stake(), request.odds(), platform))
-                    .switchIfEmpty(repository.createTrackedBet(UUID.randomUUID().toString(), request.userId(), prediction.id(), request.stake(), request.odds(), platform));
+                    .flatMap(existingId -> repository.updateTrackedBet(existingId, request.stake(), request.odds(), platform).thenReturn(true))
+                    .switchIfEmpty(Mono.defer(() -> repository.createTrackedBet(UUID.randomUUID().toString(), request.userId(), prediction.id(), request.stake(), request.odds(), platform).thenReturn(true)))
+                    .then();
             });
     }
 
@@ -105,9 +103,6 @@ public class WriteService {
                 Set<Long> foundIds = new HashSet<>();
                 for (WriteRepository.PredictionAvailabilityRow prediction : predictions) {
                     foundIds.add(prediction.id());
-                    if (prediction.recommendedSide() == null) {
-                        return Mono.error(new IllegalArgumentException("One or more predictions are invalid or not available for betting"));
-                    }
                 }
                 if (foundIds.size() != request.predictionIds().size()) {
                     return Mono.error(new IllegalArgumentException("One or more predictions are invalid or not available for betting"));
