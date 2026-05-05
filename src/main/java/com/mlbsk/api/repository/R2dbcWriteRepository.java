@@ -2,6 +2,7 @@ package com.mlbsk.api.repository;
 
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
+import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
 import jakarta.inject.Singleton;
@@ -322,7 +323,9 @@ public class R2dbcWriteRepository implements WriteRepository {
     }
 
     private Mono<Void> executeWithConnection(Connection conn, String sql, StatementBinder binder) {
-        return Mono.from(binder.bind(conn.createStatement(sql)).execute()).then();
+        return Flux.from(binder.bind(conn.createStatement(sql)).execute())
+            .flatMap(Result::getRowsUpdated)
+            .then();
     }
 
     private long readLong(Row row, String column) {
