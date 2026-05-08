@@ -33,6 +33,8 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   exit 1
 fi
 
-docker compose --env-file "${ENV_FILE}" build api
-docker compose --env-file "${ENV_FILE}" up -d
+export COMPOSE_PARALLEL_LIMIT="${COMPOSE_PARALLEL_LIMIT:-1}"
+
+docker compose --env-file "${ENV_FILE}" build --pull api
+docker compose --env-file "${ENV_FILE}" up -d --no-build api nginx
 docker compose --env-file "${ENV_FILE}" ps

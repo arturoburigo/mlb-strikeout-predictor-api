@@ -17,14 +17,17 @@ jobs:
       - name: Setup SSH
         shell: bash
         run: |
+          OCI_HOST_CLEAN="$(printf '%s' "${{ secrets.OCI_HOST }}" | tr -d '\r\n')"
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.OCI_SSH_KEY }}" > ~/.ssh/oci_key
           chmod 600 ~/.ssh/oci_key
-          ssh-keyscan -H "${{ secrets.OCI_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$OCI_HOST_CLEAN" >> ~/.ssh/known_hosts
 
       - name: Sync backend sources
         shell: bash
         run: |
+          OCI_HOST_CLEAN="$(printf '%s' "${{ secrets.OCI_HOST }}" | tr -d '\r\n')"
+          OCI_USER_CLEAN="$(printf '%s' "${{ secrets.OCI_USER }}" | tr -d '\r\n')"
           rsync -az --delete \
             --exclude ".git" \
             --exclude ".github" \
@@ -36,16 +39,36 @@ jobs:
             --exclude "ssh-key-*.key" \
             --exclude "ssh-key-*.pub" \
             -e "ssh -i ~/.ssh/oci_key" \
-            ./ "${{ secrets.OCI_USER }}@${{ secrets.OCI_HOST }}:/opt/mlb-strikeout-predictor-api/"
+            ./ "${OCI_USER_CLEAN}@${OCI_HOST_CLEAN}:/opt/mlb-strikeout-predictor-api/"
 
       - name: Rebuild backend on OCI
         shell: bash
         run: |
-          ssh -i ~/.ssh/oci_key "${{ secrets.OCI_USER }}@${{ secrets.OCI_HOST }}" '
+          OCI_HOST_CLEAN="$(printf '%s' "${{ secrets.OCI_HOST }}" | tr -d '\r\n')"
+          OCI_USER_CLEAN="$(printf '%s' "${{ secrets.OCI_USER }}" | tr -d '\r\n')"
+          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i ~/.ssh/oci_key "${OCI_USER_CLEAN}@${OCI_HOST_CLEAN}" '
             set -euo pipefail
             export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+            export TMPDIR="/var/tmp"
+            export COMPOSE_PARALLEL_LIMIT=1
             systemctl --user start podman.socket
             cd /opt/mlb-strikeout-predictor-api
-            docker compose up -d --build api web nginx
+
+            build_api() {
+              docker compose build --pull api
+            }
+
+            echo "--- Building api image ---"
+            if ! build_api; then
+              echo "--- First build failed; pruning dangling Podman state and retrying once ---"
+              docker image prune -f || true
+              docker builder prune -af || true
+              podman image rm -f mlb-strikeout-predictor-api:local maven:3.9.9-eclipse-temurin-21 eclipse-temurin:21-jre || true
+              podman image prune -af || true
+              build_api
+            fi
+
+            echo "--- Starting api and nginx without rebuilding dependencies ---"
+            docker compose up -d --no-build api nginx
             docker compose ps
           '
