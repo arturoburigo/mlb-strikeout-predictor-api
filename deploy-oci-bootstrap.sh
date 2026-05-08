@@ -36,5 +36,5 @@ fi
 export COMPOSE_PARALLEL_LIMIT="${COMPOSE_PARALLEL_LIMIT:-1}"
 
 docker compose --env-file "${ENV_FILE}" build --pull api
-docker compose --env-file "${ENV_FILE}" up -d --no-build api nginx
+docker compose --env-file "${ENV_FILE}" up -d --no-build --force-recreate api nginx
 docker compose --env-file "${ENV_FILE}" ps

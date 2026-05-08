@@ -69,6 +69,6 @@ jobs:
             fi
 
             echo "--- Starting api and nginx without rebuilding dependencies ---"
-            docker compose up -d --no-build api nginx
+            docker compose up -d --no-build --force-recreate api nginx
             docker compose ps
           '
